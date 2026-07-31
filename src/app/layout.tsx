@@ -2,6 +2,13 @@ import type { Metadata, Viewport } from 'next'
 import { Inter } from 'next/font/google'
 import './globals.css'
 
+// Tự động khởi tạo database khi server khởi động lần đầu (Demo Mode)
+if (process.env.DEMO_MODE === 'true') {
+  import('@/lib/database/init').then(({ ensureDbInitialized }) => {
+    ensureDbInitialized().catch(console.error)
+  })
+}
+
 const inter = Inter({
   subsets: ['latin', 'vietnamese'],
   variable: '--font-inter',

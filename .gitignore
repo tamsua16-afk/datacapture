@@ -30,12 +30,16 @@ yarn-debug.log*
 yarn-error.log*
 .pnpm-debug.log*
 
-# env files (can opt-in for committing if needed)
-.env*
-
-# vercel
-.vercel
+# env files (secrets - NEVER commit these)
+.env.local
+.env.production
+.env.production.local
+.env.development.local
+.env.test.local
 
 # typescript
 *.tsbuildinfo
 next-env.d.ts
+
+# Keep demo database in repo for easy deployment
+# data/xuong-data-capture.db is intentionally tracked
