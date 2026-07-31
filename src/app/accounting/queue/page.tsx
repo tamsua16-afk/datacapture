@@ -23,7 +23,7 @@ export default function AccountingQueuePage() {
 
   const fetchWorkshops = async () => {
     try {
-      const res = await fetch('/api/master-data/workshops')
+      const res = await fetch('/api/workshops')
       const data = await res.json()
       if (data.data) setWorkshops(data.data)
     } catch {}

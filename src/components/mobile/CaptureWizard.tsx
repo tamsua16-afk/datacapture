@@ -123,18 +123,21 @@ export default function CaptureWizard() {
     else if (initialType === 'STOCKTAKE') setTransactionType('STOCKTAKE')
   }, [initialType])
 
-  // Fetch Workshops & Warehouses
+  // Fetch Workshops theo RBAC
   useEffect(() => {
-    async function loadMasterData() {
+    async function loadWorkshops() {
       try {
         setIsLoadingMasterData(true)
-        const res = await fetch('/api/master-data/quick-search?type=workshops')
+        const res = await fetch('/api/workshops')
         if (res.ok) {
           const data = await res.json()
-          if (data.workshops && data.workshops.length > 0) {
-            setWorkshops(data.workshops)
-            setWorkshopId(data.workshops[0].id)
+          const list: WorkshopOption[] = data.data ?? []
+          setWorkshops(list)
+          if (list.length > 0) {
+            setWorkshopId(list[0].id)
           }
+        } else {
+          console.error('Lỗi tải danh sách xưởng:', res.status)
         }
       } catch (err) {
         console.error('Lỗi tải danh mục xưởng:', err)
@@ -142,26 +145,28 @@ export default function CaptureWizard() {
         setIsLoadingMasterData(false)
       }
     }
-    loadMasterData()
+    loadWorkshops()
   }, [])
 
-  // Fetch Warehouses when workshopId changes
+  // Fetch Warehouses khi workshopId thay đổi
   useEffect(() => {
     if (!workshopId) return
     async function loadWarehouses() {
       try {
-        const res = await fetch(`/api/master-data/quick-search?type=warehouses&workshopId=${workshopId}`)
+        const res = await fetch(`/api/workshops/${workshopId}/warehouses`)
         if (res.ok) {
           const data = await res.json()
-          if (data.warehouses) {
-            setWarehouses(data.warehouses)
-            if (data.warehouses.length > 0) {
-              setSourceWarehouseId(data.warehouses[0].id)
-              if (data.warehouses.length > 1) {
-                setDestinationWarehouseId(data.warehouses[1].id)
-              }
-            }
+          const list: WarehouseOption[] = data.data ?? []
+          setWarehouses(list)
+          if (list.length > 0) {
+            setSourceWarehouseId(list[0].id)
+            setDestinationWarehouseId(list.length > 1 ? list[1].id : list[0].id)
+          } else {
+            setSourceWarehouseId('')
+            setDestinationWarehouseId('')
           }
+        } else {
+          console.error('Lỗi tải danh sách kho:', res.status)
         }
       } catch (err) {
         console.error('Lỗi tải danh mục kho:', err)

@@ -62,8 +62,8 @@ export default function StocktakesListPage() {
     async function fetchMasterData() {
       try {
         const [wsRes, whRes] = await Promise.all([
-          fetch('/api/master-data/workshops').then((r) => r.json()),
-          fetch('/api/master-data/warehouses').then((r) => r.json()),
+          fetch('/api/workshops').then((r) => r.json()),
+          fetch('/api/admin/warehouses').then((r) => r.json()),
         ])
         if (wsRes.data) setWorkshops(wsRes.data)
         if (whRes.data) setWarehouses(whRes.data)
