@@ -1,0 +1,45 @@
+{
+  "name": "Data Capture - Ứng dụng số hóa",
+  "short_name": "DataCapture",
+  "description": "Hệ thống số hóa phiếu nhập xuất kho bằng AI",
+  "start_url": "/",
+  "display": "standalone",
+  "display_override": ["window-controls-overlay", "standalone"],
+  "orientation": "portrait-primary",
+  "background_color": "#0f172a",
+  "theme_color": "#1e40af",
+  "lang": "vi",
+  "categories": ["productivity", "business"],
+  "icons": [
+    {
+      "src": "/icons/icon-192.png",
+      "sizes": "192x192",
+      "type": "image/png",
+      "purpose": "maskable any"
+    },
+    {
+      "src": "/icons/icon-512.png",
+      "sizes": "512x512",
+      "type": "image/png",
+      "purpose": "maskable any"
+    }
+  ],
+  "shortcuts": [
+    {
+      "name": "Nhập kho",
+      "short_name": "Nhập",
+      "description": "Tạo phiếu nhập kho mới",
+      "url": "/mobile/transactions/new?type=RECEIPT",
+      "icons": [{ "src": "/icons/icon-192.png", "sizes": "192x192" }]
+    },
+    {
+      "name": "Xuất kho",
+      "short_name": "Xuất",
+      "description": "Tạo phiếu xuất kho mới",
+      "url": "/mobile/transactions/new?type=ISSUE",
+      "icons": [{ "src": "/icons/icon-192.png", "sizes": "192x192" }]
+    }
+  ],
+  "screenshots": [],
+  "prefer_related_applications": false
+}
