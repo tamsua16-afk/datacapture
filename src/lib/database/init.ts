@@ -1,9 +1,16 @@
 /**
- * Database initializer – chạy khi server khởi động.
- * Tự động tạo schema và seed dữ liệu demo nếu DB chưa tồn tại.
+ * Database initializer – chạy khi server khởi động lần đầu.
+ * Tự động tạo schema và seed dữ liệu demo từ demo.ts nếu DB chưa tồn tại.
  */
 
 import { getRawClient } from './client'
+import {
+  DEMO_USERS,
+  DEMO_WORKSHOPS,
+  DEMO_WAREHOUSES,
+  DEMO_ITEMS,
+  DEMO_ITEM_ALIASES,
+} from '@/config/demo'
 import path from 'path'
 import fs from 'fs'
 
@@ -26,7 +33,7 @@ export async function ensureDbInitialized(): Promise<void> {
   try {
     const client = getRawClient()
 
-    // ── Tạo schema ──────────────────────────────────────────────────────────
+    // ── Tạo toàn bộ schema ───────────────────────────────────────────────────
     await client.executeMultiple(`
       PRAGMA foreign_keys = OFF;
       PRAGMA journal_mode = WAL;
@@ -47,7 +54,8 @@ export async function ensureDbInitialized(): Promise<void> {
         id TEXT PRIMARY KEY,
         code TEXT NOT NULL UNIQUE,
         name TEXT NOT NULL,
-        description TEXT,
+        address TEXT,
+        manager_name TEXT,
         is_active INTEGER NOT NULL DEFAULT 1,
         created_at TEXT NOT NULL DEFAULT (datetime('now')),
         updated_at TEXT NOT NULL DEFAULT (datetime('now'))
@@ -55,9 +63,10 @@ export async function ensureDbInitialized(): Promise<void> {
 
       CREATE TABLE IF NOT EXISTS warehouses (
         id TEXT PRIMARY KEY,
+        workshop_id TEXT NOT NULL,
         code TEXT NOT NULL UNIQUE,
         name TEXT NOT NULL,
-        workshop_id TEXT NOT NULL,
+        warehouse_type TEXT NOT NULL DEFAULT 'GENERAL',
         is_active INTEGER NOT NULL DEFAULT 1,
         created_at TEXT NOT NULL DEFAULT (datetime('now')),
         updated_at TEXT NOT NULL DEFAULT (datetime('now'))
@@ -67,14 +76,18 @@ export async function ensureDbInitialized(): Promise<void> {
         id TEXT PRIMARY KEY,
         code TEXT NOT NULL UNIQUE,
         name TEXT NOT NULL,
+        description TEXT,
+        is_active INTEGER NOT NULL DEFAULT 1,
         created_at TEXT NOT NULL DEFAULT (datetime('now'))
       );
 
       CREATE TABLE IF NOT EXISTS unit_conversions (
         id TEXT PRIMARY KEY,
-        from_unit_id TEXT NOT NULL,
-        to_unit_id TEXT NOT NULL,
-        factor REAL NOT NULL,
+        item_id TEXT,
+        from_unit TEXT NOT NULL,
+        to_unit TEXT NOT NULL,
+        conversion_factor REAL NOT NULL,
+        is_active INTEGER NOT NULL DEFAULT 1,
         created_at TEXT NOT NULL DEFAULT (datetime('now'))
       );
 
@@ -82,9 +95,10 @@ export async function ensureDbInitialized(): Promise<void> {
         id TEXT PRIMARY KEY,
         code TEXT NOT NULL UNIQUE,
         name TEXT NOT NULL,
-        unit_id TEXT NOT NULL,
-        category TEXT,
-        description TEXT,
+        item_group TEXT NOT NULL DEFAULT 'OTHER',
+        base_unit TEXT NOT NULL DEFAULT 'cái',
+        minimum_stock REAL NOT NULL DEFAULT 0,
+        maximum_stock REAL,
         is_active INTEGER NOT NULL DEFAULT 1,
         created_at TEXT NOT NULL DEFAULT (datetime('now')),
         updated_at TEXT NOT NULL DEFAULT (datetime('now'))
@@ -93,8 +107,12 @@ export async function ensureDbInitialized(): Promise<void> {
       CREATE TABLE IF NOT EXISTS item_aliases (
         id TEXT PRIMARY KEY,
         item_id TEXT NOT NULL,
-        alias TEXT NOT NULL UNIQUE,
-        created_at TEXT NOT NULL DEFAULT (datetime('now'))
+        workshop_id TEXT,
+        alias TEXT NOT NULL,
+        normalized_alias TEXT NOT NULL,
+        confirmed_count INTEGER NOT NULL DEFAULT 0,
+        created_at TEXT NOT NULL DEFAULT (datetime('now')),
+        UNIQUE(item_id, normalized_alias)
       );
 
       CREATE TABLE IF NOT EXISTS transactions (
@@ -103,7 +121,8 @@ export async function ensureDbInitialized(): Promise<void> {
         type TEXT NOT NULL,
         status TEXT NOT NULL DEFAULT 'DRAFT',
         workshop_id TEXT NOT NULL,
-        warehouse_id TEXT NOT NULL,
+        source_warehouse_id TEXT,
+        destination_warehouse_id TEXT,
         voucher_date TEXT,
         voucher_number TEXT,
         supplier_customer TEXT,
@@ -114,7 +133,11 @@ export async function ensureDbInitialized(): Promise<void> {
         ai_confidence REAL,
         ai_status TEXT,
         ai_error TEXT,
-        risk_level TEXT DEFAULT 'LOW',
+        ai_model TEXT,
+        ai_prompt_version TEXT,
+        ai_raw_response TEXT,
+        ai_processing_ms INTEGER,
+        risk_level TEXT NOT NULL DEFAULT 'LOW',
         rejection_reason TEXT,
         is_draft INTEGER NOT NULL DEFAULT 0,
         created_at TEXT NOT NULL DEFAULT (datetime('now')),
@@ -124,26 +147,34 @@ export async function ensureDbInitialized(): Promise<void> {
       CREATE TABLE IF NOT EXISTS transaction_lines (
         id TEXT PRIMARY KEY,
         transaction_id TEXT NOT NULL,
-        item_id TEXT,
         raw_item_name TEXT,
-        quantity REAL NOT NULL,
-        unit_id TEXT,
+        suggested_item_id TEXT,
+        confirmed_item_id TEXT,
+        raw_quantity REAL,
+        confirmed_quantity REAL,
+        raw_unit TEXT,
+        confirmed_unit TEXT,
         unit_price REAL,
         total_amount REAL,
+        line_confidence REAL,
+        line_status TEXT NOT NULL DEFAULT 'PENDING',
         notes TEXT,
         sort_order INTEGER NOT NULL DEFAULT 0,
-        created_at TEXT NOT NULL DEFAULT (datetime('now'))
+        created_at TEXT NOT NULL DEFAULT (datetime('now')),
+        updated_at TEXT NOT NULL DEFAULT (datetime('now'))
       );
 
       CREATE TABLE IF NOT EXISTS attachments (
         id TEXT PRIMARY KEY,
         transaction_id TEXT,
         stocktake_id TEXT,
-        file_name TEXT NOT NULL,
-        file_size INTEGER NOT NULL,
+        original_filename TEXT NOT NULL,
         mime_type TEXT NOT NULL,
+        file_size INTEGER NOT NULL,
         storage_path TEXT NOT NULL,
         file_hash TEXT,
+        signed_url TEXT,
+        signed_url_expires_at TEXT,
         uploaded_by TEXT NOT NULL,
         created_at TEXT NOT NULL DEFAULT (datetime('now'))
       );
@@ -187,16 +218,26 @@ export async function ensureDbInitialized(): Promise<void> {
       CREATE TABLE IF NOT EXISTS stocktake_lines (
         id TEXT PRIMARY KEY,
         stocktake_id TEXT NOT NULL,
-        item_id TEXT,
         raw_item_name TEXT,
+        item_id TEXT,
         book_quantity REAL,
         counted_quantity REAL,
         difference REAL,
         difference_pct REAL,
-        status TEXT DEFAULT 'UNMAPPED',
+        line_status TEXT NOT NULL DEFAULT 'UNMAPPED',
         explanation TEXT,
         created_at TEXT NOT NULL DEFAULT (datetime('now')),
         updated_at TEXT NOT NULL DEFAULT (datetime('now'))
+      );
+
+      CREATE TABLE IF NOT EXISTS period_locks (
+        id TEXT PRIMARY KEY,
+        year INTEGER NOT NULL,
+        month INTEGER NOT NULL,
+        workshop_id TEXT NOT NULL,
+        locked_by TEXT NOT NULL,
+        locked_at TEXT NOT NULL DEFAULT (datetime('now')),
+        UNIQUE(year, month, workshop_id)
       );
 
       CREATE TABLE IF NOT EXISTS audit_logs (
@@ -210,59 +251,74 @@ export async function ensureDbInitialized(): Promise<void> {
         created_at TEXT NOT NULL DEFAULT (datetime('now'))
       );
 
-      CREATE TABLE IF NOT EXISTS period_locks (
-        id TEXT PRIMARY KEY,
-        year INTEGER NOT NULL,
-        month INTEGER NOT NULL,
-        workshop_id TEXT NOT NULL,
-        locked_by TEXT NOT NULL,
-        locked_at TEXT NOT NULL DEFAULT (datetime('now')),
-        UNIQUE(year, month, workshop_id)
-      );
-
       PRAGMA foreign_keys = ON;
     `)
 
-    // ── Seed dữ liệu demo tối thiểu ──────────────────────────────────────────
+    // ── Seed Workshops ───────────────────────────────────────────────────────
+    for (const ws of DEMO_WORKSHOPS) {
+      await client.execute({
+        sql: `INSERT OR IGNORE INTO workshops (id, code, name, address, manager_name, is_active)
+              VALUES (?, ?, ?, ?, ?, 1)`,
+        args: [ws.id, ws.code, ws.name, ws.address ?? null, ws.managerName ?? null],
+      })
+    }
+    console.log(`[DB] ✅ Seeded ${DEMO_WORKSHOPS.length} xưởng`)
+
+    // ── Seed Warehouses ──────────────────────────────────────────────────────
+    for (const wh of DEMO_WAREHOUSES) {
+      await client.execute({
+        sql: `INSERT OR IGNORE INTO warehouses (id, workshop_id, code, name, warehouse_type, is_active)
+              VALUES (?, ?, ?, ?, ?, 1)`,
+        args: [wh.id, wh.workshopId, wh.code, wh.name, wh.warehouseType],
+      })
+    }
+    console.log(`[DB] ✅ Seeded ${DEMO_WAREHOUSES.length} kho`)
+
+    // ── Seed Users (với bcrypt hash) ─────────────────────────────────────────
     const bcrypt = await import('bcryptjs')
-    const passwordHash = await bcrypt.hash('demo123', 10)
+    for (const user of DEMO_USERS) {
+      const hash = await bcrypt.hash(user.password, 10)
+      await client.execute({
+        sql: `INSERT OR IGNORE INTO users (id, email, password_hash, full_name, role, workshop_id, is_active)
+              VALUES (?, ?, ?, ?, ?, ?, 1)`,
+        args: [user.id, user.email, hash, user.fullName, user.role, user.workshopId],
+      })
+    }
+    console.log(`[DB] ✅ Seeded ${DEMO_USERS.length} tài khoản demo`)
 
-    await client.executeMultiple(`
-      INSERT OR IGNORE INTO workshops (id, code, name) VALUES
-        ('ws-001', 'XS-A', 'Xưởng Sản Xuất A'),
-        ('ws-002', 'XS-B', 'Xưởng Sản Xuất B'),
-        ('ws-003', 'XD', 'Xưởng Đóng Gói');
+    // ── Seed Items ───────────────────────────────────────────────────────────
+    for (const item of DEMO_ITEMS) {
+      await client.execute({
+        sql: `INSERT OR IGNORE INTO items (id, code, name, item_group, base_unit, minimum_stock, is_active)
+              VALUES (?, ?, ?, ?, ?, ?, 1)`,
+        args: [item.id, item.code, item.name, item.itemGroup, item.baseUnit, item.minimumStock],
+      })
+    }
+    console.log(`[DB] ✅ Seeded ${DEMO_ITEMS.length} mã hàng`)
 
-      INSERT OR IGNORE INTO warehouses (id, code, name, workshop_id) VALUES
-        ('wh-001', 'KHO-A1', 'Kho Nguyên Liệu A1', 'ws-001'),
-        ('wh-002', 'KHO-A2', 'Kho Thành Phẩm A2', 'ws-001'),
-        ('wh-003', 'KHO-B1', 'Kho Nguyên Liệu B1', 'ws-002'),
-        ('wh-004', 'KHO-B2', 'Kho Thành Phẩm B2', 'ws-002'),
-        ('wh-005', 'KHO-DG', 'Kho Đóng Gói', 'ws-003');
+    // ── Seed Item Aliases ────────────────────────────────────────────────────
+    const itemCodeToId = new Map(DEMO_ITEMS.map((i) => [i.code, i.id]))
+    let aliasCount = 0
+    for (const a of DEMO_ITEM_ALIASES) {
+      const itemId = itemCodeToId.get(a.itemCode)
+      if (!itemId) continue
+      const normalized = a.alias.toLowerCase().replace(/[àáạảãăắặẳẵằâấậẩẫ]/g, 'a')
+        .replace(/[èéẹẻẽêếệểễề]/g, 'e').replace(/[ìíịỉĩ]/g, 'i')
+        .replace(/[òóọỏõôốộổỗồơớợởỡờ]/g, 'o').replace(/[ùúụủũưứựửữừ]/g, 'u')
+        .replace(/[ỳýỵỷỹ]/g, 'y').replace(/đ/g, 'd').replace(/\s+/g, ' ').trim()
+      const id = `alias-init-${itemId}-${aliasCount++}`
+      await client.execute({
+        sql: `INSERT OR IGNORE INTO item_aliases (id, item_id, workshop_id, alias, normalized_alias)
+              VALUES (?, ?, ?, ?, ?)`,
+        args: [id, itemId, a.workshopId ?? null, a.alias, normalized],
+      })
+    }
+    console.log(`[DB] ✅ Seeded ${aliasCount} alias hàng hóa`)
 
-      INSERT OR IGNORE INTO units (id, code, name) VALUES
-        ('unit-001', 'KG', 'Kilogram'),
-        ('unit-002', 'CAI', 'Cái'),
-        ('unit-003', 'HOP', 'Hộp'),
-        ('unit-004', 'LIT', 'Lít'),
-        ('unit-005', 'M', 'Mét');
-    `)
-
-    await client.execute({
-      sql: `INSERT OR IGNORE INTO users (id, email, password_hash, full_name, role, workshop_id) VALUES
-        ('demo-admin-001', 'admin@demo.com', ?, 'Quản trị viên', 'ADMIN', NULL),
-        ('demo-accountant-001', 'ketoan@demo.com', ?, 'Kế toán Nguyễn Thị B', 'ACCOUNTANT', NULL),
-        ('demo-manager-001', 'truongphong@demo.com', ?, 'Trưởng phòng Lê Văn C', 'ACCOUNTING_MANAGER', NULL),
-        ('demo-staff-001', 'nhanvien@demo.com', ?, 'Nhân viên Trần Văn A', 'WORKSHOP_STAFF', 'ws-001'),
-        ('demo-viewer-001', 'xem@demo.com', ?, 'Người xem Phạm Thị D', 'VIEWER', NULL)`,
-      args: [passwordHash, passwordHash, passwordHash, passwordHash, passwordHash],
-    })
-
-    console.log('[DB] ✅ Khởi tạo database thành công!')
     _initialized = true
+    console.log('[DB] 🎉 Khởi tạo database demo hoàn tất!')
   } catch (err) {
     console.error('[DB] ❌ Lỗi khởi tạo database:', err)
-    // Không throw – cho phép app tiếp tục chạy
-    _initialized = true
+    _initialized = true // Cho app tiếp tục, tránh crash loop
   }
 }
