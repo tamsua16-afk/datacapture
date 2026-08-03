@@ -25,10 +25,9 @@ export default function LoginForm() {
   const [password, setPassword] = useState('')
   const [loading, setLoading] = useState(false)
   const [error, setError] = useState<string | null>(null)
-  const [showDemoAccounts, setShowDemoAccounts] = useState(false)
+  const [showDemoAccounts, setShowDemoAccounts] = useState(true) // Mặc định mở tài khoản demo cho dễ chọn
 
-  async function handleSubmit(e: React.FormEvent) {
-    e.preventDefault()
+  async function executeLogin(targetEmail: string, targetPass: string) {
     setLoading(true)
     setError(null)
 
@@ -36,54 +35,65 @@ export default function LoginForm() {
       const res = await fetch('/api/auth/login', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ email, password }),
+        body: JSON.stringify({ email: targetEmail, password: targetPass }),
       })
 
       const data = await res.json()
 
       if (!res.ok) {
         setError(data.error?.message ?? 'Đăng nhập thất bại. Vui lòng kiểm tra lại.')
+        setLoading(false)
         return
       }
 
       // Redirect dựa theo role
       const role = data.user?.role
+      let targetUrl = '/mobile'
       if (role === 'WAREHOUSE_ACCOUNTANT' || role === 'ACCOUNTING_MANAGER') {
-        router.push('/accounting/queue')
+        targetUrl = '/accounting/queue'
       } else if (role === 'ADMIN') {
-        router.push('/admin/users')
+        targetUrl = '/admin/users'
       } else if (role === 'VIEWER') {
-        router.push('/dashboard')
-      } else {
-        router.push('/mobile')
+        targetUrl = '/dashboard'
       }
+
+      router.push(targetUrl)
+      router.refresh()
     } catch {
-      setError('Lỗi kết nối. Vui lòng thử lại.')
-    } finally {
+      setError('Lỗi kết nối máy chủ. Vui lòng thử lại.')
       setLoading(false)
     }
   }
 
-  function fillDemo(user: DemoUser) {
+  async function handleSubmit(e: React.FormEvent) {
+    e.preventDefault()
+    if (!email || !password) {
+      setError('Vui lòng nhập Email và Mật khẩu')
+      return
+    }
+    await executeLogin(email, password)
+  }
+
+  async function selectDemoUser(user: DemoUser) {
     setEmail(user.email)
     setPassword(user.password)
-    setShowDemoAccounts(false)
     setError(null)
+    await executeLogin(user.email, user.password)
   }
 
   return (
     <div>
-      <h2 style={{ fontSize: '1.25rem', fontWeight: 700, marginBottom: 8, color: 'var(--color-text-primary)', letterSpacing: '-0.02em' }}>
+      <h2 style={{ fontSize: '1.25rem', fontWeight: 700, marginBottom: 8, color: '#0f172a', letterSpacing: '-0.02em' }}>
         Đăng nhập
       </h2>
-      <p style={{ fontSize: '0.875rem', color: 'var(--color-text-secondary)', marginBottom: 24 }}>
-        Nhập thông tin tài khoản của bạn
+      <p style={{ fontSize: '0.875rem', color: '#64748b', marginBottom: 20 }}>
+        Chọn tài khoản demo hoặc nhập thông tin đăng nhập
       </p>
 
       <form onSubmit={handleSubmit} noValidate>
         {/* Email */}
-        <div style={{ marginBottom: 16 }}>
-          <label htmlFor="email" className="form-label">
+        <div style={{ marginBottom: 14 }}>
+          <label htmlFor="email" style={{ display: 'block', fontSize: '0.8125rem', fontWeight: 600, color: '#334155', marginBottom: 4 }}>
             Email
           </label>
           <input
@@ -93,15 +103,24 @@ export default function LoginForm() {
             required
             value={email}
             onChange={e => setEmail(e.target.value)}
-            className="form-input"
-            placeholder="ban@congty.vn"
+            style={{
+              width: '100%',
+              padding: '10px 14px',
+              borderRadius: '10px',
+              border: '1px solid #cbd5e1',
+              fontSize: '0.9375rem',
+              outline: 'none',
+              boxSizing: 'border-box',
+              background: '#f8fafc',
+            }}
+            placeholder="staff@demo.local"
             aria-label="Địa chỉ email"
           />
         </div>
 
         {/* Password */}
-        <div style={{ marginBottom: 20 }}>
-          <label htmlFor="password" className="form-label">
+        <div style={{ marginBottom: 18 }}>
+          <label htmlFor="password" style={{ display: 'block', fontSize: '0.8125rem', fontWeight: 600, color: '#334155', marginBottom: 4 }}>
             Mật khẩu
           </label>
           <input
@@ -111,88 +130,156 @@ export default function LoginForm() {
             required
             value={password}
             onChange={e => setPassword(e.target.value)}
-            className="form-input"
+            style={{
+              width: '100%',
+              padding: '10px 14px',
+              borderRadius: '10px',
+              border: '1px solid #cbd5e1',
+              fontSize: '0.9375rem',
+              outline: 'none',
+              boxSizing: 'border-box',
+              background: '#f8fafc',
+            }}
             placeholder="••••••••"
             aria-label="Mật khẩu"
           />
         </div>
 
-        {/* Error */}
+        {/* Error Notification */}
         {error && (
-          <div className="warning-block warning-error" role="alert" style={{ marginBottom: 16 }}>
+          <div style={{
+            padding: '10px 14px',
+            background: '#fef2f2',
+            border: '1px solid #fca5a5',
+            borderRadius: '10px',
+            color: '#991b1b',
+            fontSize: '0.8125rem',
+            marginBottom: 16,
+            display: 'flex',
+            alignItems: 'center',
+            gap: 8,
+          }} role="alert">
             <span>⚠️</span>
             <span>{error}</span>
           </div>
         )}
 
-        {/* Submit */}
+        {/* Submit Button */}
         <button
           type="submit"
-          className="btn-mobile btn-primary"
-          style={{ width: '100%', marginBottom: 12 }}
-          disabled={loading || !email || !password}
+          disabled={loading}
+          style={{
+            width: '100%',
+            padding: '12px',
+            borderRadius: '12px',
+            background: loading ? '#94a3b8' : 'linear-gradient(135deg, #2563eb 0%, #1d4ed8 100%)',
+            color: 'white',
+            fontWeight: 600,
+            fontSize: '0.9375rem',
+            border: 'none',
+            cursor: loading ? 'not-allowed' : 'pointer',
+            marginBottom: 16,
+            boxShadow: '0 4px 12px rgba(37, 99, 235, 0.25)',
+            display: 'flex',
+            alignItems: 'center',
+            justifyContent: 'center',
+            gap: 8,
+            transition: 'all 0.15s ease',
+          }}
           aria-label="Đăng nhập vào hệ thống"
         >
           {loading ? (
-            <span style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+            <>
               <span className="spinner" />
-              Đang đăng nhập...
-            </span>
-          ) : 'Đăng nhập'}
+              Đang xác thực...
+            </>
+          ) : (
+            'Đăng nhập'
+          )}
         </button>
 
-        {/* Demo accounts */}
+        {/* Toggle Demo Accounts Button */}
         <button
           type="button"
           onClick={() => setShowDemoAccounts(!showDemoAccounts)}
-          className="btn-mobile btn-secondary"
-          style={{ width: '100%' }}
+          style={{
+            width: '100%',
+            padding: '10px',
+            borderRadius: '10px',
+            background: '#f1f5f9',
+            border: '1px solid #e2e8f0',
+            color: '#334155',
+            fontWeight: 600,
+            fontSize: '0.8125rem',
+            cursor: 'pointer',
+            display: 'flex',
+            alignItems: 'center',
+            justifyContent: 'center',
+            gap: 6,
+          }}
           aria-expanded={showDemoAccounts}
-          aria-label="Xem tài khoản demo"
+          aria-label="Danh sách tài khoản Demo"
         >
-          🧑‍💼 Tài khoản Demo {showDemoAccounts ? '▲' : '▼'}
+          <span>🧑‍💼 Chọn nhanh tài khoản Demo</span>
+          <span style={{ fontSize: '0.75rem' }}>{showDemoAccounts ? '▲' : '▼'}</span>
         </button>
 
+        {/* Demo Users Quick Picker */}
         {showDemoAccounts && (
           <div style={{
             marginTop: 12,
-            border: '1.5px solid var(--color-primary-100)',
+            border: '1px solid #cbd5e1',
             borderRadius: 12,
             overflow: 'hidden',
+            background: '#ffffff',
+            boxShadow: '0 4px 12px rgba(0,0,0,0.05)',
           }}>
             {DEMO_USERS.map((user) => (
               <button
                 key={user.email}
                 type="button"
-                onClick={() => fillDemo(user)}
+                onClick={() => selectDemoUser(user)}
+                disabled={loading}
                 style={{
                   display: 'flex',
-                  flexDirection: 'column',
+                  alignItems: 'center',
+                  justifyContent: 'space-between',
                   width: '100%',
-                  padding: '10px 16px',
-                  borderBottom: '1px solid var(--color-border)',
+                  padding: '10px 14px',
+                  borderBottom: '1px solid #f1f5f9',
                   background: 'none',
-                  border: 'none',
+                  borderLeft: 'none',
+                  borderRight: 'none',
+                  borderTop: 'none',
                   textAlign: 'left',
-                  cursor: 'pointer',
-                  transition: 'background var(--transition-fast)',
+                  cursor: loading ? 'wait' : 'pointer',
+                  transition: 'background 0.15s ease',
                   minHeight: 44,
                 }}
-                onMouseEnter={e => (e.currentTarget.style.background = 'var(--color-primary-50)')}
+                onMouseEnter={e => (e.currentTarget.style.background = '#eff6ff')}
                 onMouseLeave={e => (e.currentTarget.style.background = 'none')}
-                aria-label={`Đăng nhập với tài khoản ${user.role}`}
+                aria-label={`Đăng nhập nhanh vai trò ${user.role}`}
               >
-                <span style={{ fontWeight: 600, fontSize: '0.875rem', color: 'var(--color-text-primary)' }}>
-                  {user.label}
-                </span>
-                <span style={{ fontSize: '0.75rem', color: 'var(--color-text-muted)' }}>
-                  {user.email}
+                <div>
+                  <div style={{ fontWeight: 600, fontSize: '0.875rem', color: '#1e293b' }}>
+                    {user.label}
+                  </div>
+                  <div style={{ fontSize: '0.75rem', color: '#64748b' }}>
+                    {user.email}
+                  </div>
+                </div>
+                <span style={{
+                  fontSize: '0.75rem',
+                  fontWeight: 600,
+                  color: '#2563eb',
+                  background: '#dbeafe',
+                  padding: '4px 8px',
+                  borderRadius: '6px',
+                }}>
+                  Đăng nhập →
                 </span>
               </button>
             ))}
-            <div style={{ padding: '8px 16px', background: 'var(--color-surface-muted)', fontSize: '0.75rem', color: 'var(--color-text-muted)' }}>
-              Mật khẩu demo: <strong>demo1234</strong>
-            </div>
           </div>
         )}
       </form>

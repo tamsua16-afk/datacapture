@@ -30,8 +30,8 @@ export const SIGNED_URL_EXPIRES_SECONDS = Number(
 )
 export const STORAGE_BUCKET = 'attachments'
 
-export const IS_DEMO_MODE = process.env.DEMO_MODE === 'true'
-export const IS_MOCK_AI = process.env.MOCK_AI === 'true'
+export const IS_DEMO_MODE = process.env.DEMO_MODE !== 'false'
+export const IS_MOCK_AI = process.env.MOCK_AI !== 'false'
 
 export const DEFAULT_PAGE_SIZE = 20
 export const MAX_PAGE_SIZE = 100

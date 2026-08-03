@@ -10,7 +10,7 @@ import * as schema from './schema'
 import path from 'path'
 import fs from 'fs'
 
-const IS_DEMO = process.env.DEMO_MODE === 'true'
+const IS_DEMO = process.env.DEMO_MODE !== 'false'
 
 type DemoDb = ReturnType<typeof drizzleLibsql>
 

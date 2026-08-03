@@ -4,7 +4,7 @@ export const dynamic = 'force-dynamic'
 
 export async function GET() {
   try {
-    const isDemo = process.env.DEMO_MODE === 'true'
+    const isDemo = process.env.DEMO_MODE !== 'false'
 
     return NextResponse.json({
       status: 'ok',
